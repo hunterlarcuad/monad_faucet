@@ -58,6 +58,7 @@ IDX_UPDATE = -1
 DEF_SUCCESS = 0
 DEF_FAIL = -1
 DEF_UNAVAILABLE = 10  # Service unavailable
+DEF_CLAIMED = 10  # Claimed already
 
 
 class FaucetTask():
@@ -348,6 +349,12 @@ class FaucetTask():
         self.status_save()
         self.is_update = True
 
+    def set_status(self, add_hour=2):
+        """
+        """
+        avail_ts = time.time() + add_hour * 3600
+        self.update_status(avail_ts)
+
     def get_tag_info(self, s_tag, s_text):
         """
         s_tag:
@@ -397,9 +404,8 @@ class FaucetTask():
                 s_info = ele_div.text
                 self.logit(None, f'faucet is unavailable. {s_info}')
 
-                # Retry one hour later
-                avail_ts = time.time() + 3600
-                self.update_status(avail_ts)
+                # Retry several hour later
+                self.set_status(add_hour=3)
                 self.is_update = False
                 self.logit(None, 'Update status file.')
 
@@ -463,14 +469,12 @@ class FaucetTask():
                             self.logit(None, 'Faucet Claim Success!')
                             return DEF_SUCCESS
                         elif s_info.find('Claimed already') >= 0:
-                            avail_ts = time.time() + 3600
-                            self.update_status(avail_ts)
+                            self.set_status(add_hour=6)
                             self.is_update = False
-                            return DEF_SUCCESS
+                            return DEF_CLAIMED
                         elif s_info.find('Faucet is currently closed') >= 0:
                             # Retry one hour later
-                            avail_ts = time.time() + 3600
-                            self.update_status(avail_ts)
+                            self.set_status(add_hour=3)
                             self.is_update = False
                             self.logit(None, 'Update status file.')
                             return DEF_UNAVAILABLE
@@ -630,10 +634,13 @@ def main(args):
 
                 if ret_claim == DEF_SUCCESS:
                     lst_success.append(s_profile)
-
-                if ret_claim in [DEF_SUCCESS, DEF_UNAVAILABLE]:
+                elif ret_claim in [DEF_SUCCESS, DEF_UNAVAILABLE, DEF_CLAIMED]:
                     instFaucetTask.close()
                     break
+                elif ret_claim == DEF_FAIL:
+                    continue
+                else:
+                    logger.info(f'[{s_profile}] Unknown ret_claim={ret_claim} [ERROR]') # noqa
 
             except Exception as e:
                 logger.info(f'[{s_profile}] An error occurred: {str(e)}')
